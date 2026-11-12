@@ -1,0 +1,6 @@
+{
+  "name": "مداقش - Mudaqash",
+  "description": "لعبة البطاقات الجماعية مداقش (Mudaqash) في الوقت الفعلي على طاولة بلوت احترافية",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
