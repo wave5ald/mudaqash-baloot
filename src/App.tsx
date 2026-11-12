@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Peer, { DataConnection } from 'peerjs';
+import { Analytics } from '@vercel/analytics/react';
 import {
   calculateRemainingShare,
   canSelectPlayerColor,
@@ -1074,6 +1075,7 @@ export default function App() {
 
   return (
     <main className="w-screen h-screen overflow-hidden bg-[#0B0F17] relative">
+      <Analytics />
       <BalootTable
         gameState={gameState}
         localPlayerId={localPlayerId}
