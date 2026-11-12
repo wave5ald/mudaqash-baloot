@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Peer, { DataConnection } from 'peerjs';
-import { Analytics } from '@vercel/analytics/react';
 import {
   calculateRemainingShare,
   canSelectPlayerColor,
+  CARDS_PER_PLAYER,
   checkTableWinner,
   createBalootDeck,
   evaluateHand,
   getFirstAvailableColorId,
   haveAllActivePlayersDecided,
+  MIN_PLAYERS_TO_START,
   resolveRoundPayouts,
 } from './game/rules';
 import {
@@ -109,16 +110,16 @@ export default function App() {
   const startRoundOnHost = useCallback(
     (baseState: GameState, roundNum: number, startIdx: number) => {
       const playerCount = baseState.players.length;
-      if (playerCount < 2) return;
+      if (playerCount < MIN_PLAYERS_TO_START) return;
 
-      const deck = createBalootDeck(playerCount, baseState.settings.cardsPerPlayer);
+      const deck = createBalootDeck(playerCount);
       const validStartIdx = startIdx % playerCount;
       const firstPlayerId = baseState.players[validStartIdx].id;
 
       const dealtPlayers: Player[] = baseState.players.map((p, idx) => {
         const hand = deck.slice(
-          idx * baseState.settings.cardsPerPlayer,
-          (idx + 1) * baseState.settings.cardsPerPlayer
+          idx * CARDS_PER_PLAYER,
+          (idx + 1) * CARDS_PER_PLAYER
         );
         return {
           ...p,
@@ -936,7 +937,7 @@ export default function App() {
   };
 
   const handleStartMatch = () => {
-    if (!isHost || gameState.players.length < 2) return;
+    if (!isHost || gameState.players.length < MIN_PLAYERS_TO_START) return;
     startRoundOnHost(gameState, 1, 0);
   };
 
@@ -1155,7 +1156,6 @@ export default function App() {
           onStartMatch={handleStartMatch}
         />
       )}
-      <Analytics />
     </main>
   );
 }

@@ -1,6 +1,5 @@
 import {
   Card,
-  HandCategory,
   HandEvaluation,
   Player,
   PlayerColorId,
@@ -10,6 +9,9 @@ import {
   ResolutionSummary,
   Suit,
 } from './types';
+
+export const MIN_PLAYERS_TO_START = 4;
+export const CARDS_PER_PLAYER = 4;
 
 export const PLAYER_COLORS: PlayerColorOption[] = [
   {
@@ -114,10 +116,6 @@ export function canSelectPlayerColor(
   return !players.some((p) => p.id !== requestingPlayerId && p.colorId === targetColorId);
 }
 
-/**
- * Checks if any player has reached or exceeded the winningTarget balance.
- * If multiple players reach it in the same round, the player with the highest balance wins the table.
- */
 export function checkTableWinner(
   players: Pick<Player, 'id' | 'balance'>[],
   winningTarget: number
@@ -132,6 +130,18 @@ export function checkTableWinner(
 
 export const SUITS: Suit[] = ['♠', '♥', '♦', '♣'];
 
+/**
+ * Full descending rank list from strongest (A = 14) down to 5 (for up to 10 players).
+ * When there are N players (4..10), only the top N strongest ranks are included in the deck
+ * (4 suits per rank = 4 * N total cards).
+ * - 4 players -> 16 cards: A, K, Q, J
+ * - 5 players -> 20 cards: A, K, Q, J, 10
+ * - 6 players -> 24 cards: A, K, Q, J, 10, 9
+ * - 7 players -> 28 cards: A, K, Q, J, 10, 9, 8
+ * - 8 players -> 32 cards: A, K, Q, J, 10, 9, 8, 7
+ * - 9 players -> 36 cards: A, K, Q, J, 10, 9, 8, 7, 6
+ * - 10 players -> 40 cards: A, K, Q, J, 10, 9, 8, 7, 6, 5
+ */
 export const RANKS: { label: RankLabel; value: RankValue; arabicName: string }[] = [
   { label: 'A', value: 14, arabicName: 'الأكة' },
   { label: 'K', value: 13, arabicName: 'الشايب' },
@@ -141,6 +151,8 @@ export const RANKS: { label: RankLabel; value: RankValue; arabicName: string }[]
   { label: '9', value: 9, arabicName: '9' },
   { label: '8', value: 8, arabicName: '8' },
   { label: '7', value: 7, arabicName: '7' },
+  { label: '6', value: 6, arabicName: '6' },
+  { label: '5', value: 5, arabicName: '5' },
 ];
 
 export function getRankArabicName(value: number): string {
@@ -149,24 +161,32 @@ export function getRankArabicName(value: number): string {
 }
 
 /**
- * Generates a 32-card Baloot deck, or a 64-card double Baloot deck automatically
- * if playerCount > 7 or total cards required > 32.
+ * Returns the active rank slice for a given playerCount (clamped between 4 and 10).
  */
-export function createBalootDeck(playerCount: number, cardsPerPlayer: 4 | 5 = 4): Card[] {
-  const needsDoubleDeck = playerCount > 7 || playerCount * cardsPerPlayer > 32;
-  const deckCopies = needsDoubleDeck ? 2 : 1;
+export function getActiveRanksForPlayerCount(playerCount: number) {
+  const clampedCount = Math.min(10, Math.max(MIN_PLAYERS_TO_START, playerCount));
+  return RANKS.slice(0, clampedCount);
+}
+
+/**
+ * Generates the exact Mudaqash deck scaled to the number of players:
+ * For N players (minimum 4, maximum 10), uses the N highest card ranks across 4 suits = 4 * N cards.
+ * - 4 players -> 16 cards (A, K, Q, J)
+ * - 5 players -> 20 cards (A, K, Q, J, 10)
+ * etc.
+ */
+export function createBalootDeck(playerCount: number): Card[] {
+  const activeRanks = getActiveRanksForPlayerCount(playerCount);
   const deck: Card[] = [];
 
-  for (let copy = 0; copy < deckCopies; copy++) {
+  for (const rank of activeRanks) {
     for (const suit of SUITS) {
-      for (const rank of RANKS) {
-        deck.push({
-          id: `${rank.label}${suit}-${copy}`,
-          suit,
-          rank: rank.label,
-          value: rank.value,
-        });
-      }
+      deck.push({
+        id: `${rank.label}${suit}`,
+        suit,
+        rank: rank.label,
+        value: rank.value,
+      });
     }
   }
 
@@ -185,13 +205,16 @@ export function shuffleDeck(cards: Card[]): Card[] {
 }
 
 /**
- * Evaluates a 4-card or 5-card Mudaqash Baloot hand according to the strict hierarchy:
- * 1. Four of a Kind (أربعات)
- * 2. Full House (فل هاوس - if 5 cards: 3 of a kind + 1 Pair)
- * 3. Three of a Kind (ثلاثيات)
- * 4. Two Pair (زوجين)
- * 5. One Pair (زوج واحد)
- * 6. High Card (كرت عالي - A = 14 highest)
+ * Evaluates a 4-card Mudaqash hand according to the exact similarity count & rank rules:
+ * Hand strength is determined by how many matching cards of the same rank you have:
+ * 1. FOUR_OF_A_KIND (أربعات - 4 of the same rank, e.g. 4 Jacks > 3 Aces + 1 King) -> categoryScore = 5
+ * 2. THREE_OF_A_KIND (ثلاثيات - 3 of the same rank, e.g. 3 Jacks > 2 Aces + 2 Kings) -> categoryScore = 4
+ * 3. TWO_PAIR (زوجين - 2 of one rank + 2 of another rank, e.g. 2 Queens + 2 Jacks > 2 Aces + 1 King + 1 Ten) -> categoryScore = 3
+ * 4. ONE_PAIR (زوج واحد - 2 of the same rank + 2 unmatched cards) -> categoryScore = 2
+ * 5. HIGH_CARD (كرت عالي - 4 distinct ranks) -> categoryScore = 1
+ *
+ * Tie-breaker within the same category:
+ * Groups are sorted by count descending, then by rank value descending (A=14 > K=13 > Q=12 > J=11 > 10 ...).
  */
 export function evaluateHand(cards: Card[]): HandEvaluation {
   if (!cards || cards.length === 0) {
@@ -221,28 +244,18 @@ export function evaluateHand(cards: Card[]): HandEvaluation {
   const topCount = groups[0].count;
   const secondCount = groups[1]?.count || 0;
 
+  // 1. Four of a Kind (4 matching cards)
   if (topCount >= 4) {
-    const isFive = topCount === 5;
-    const category: HandCategory = isFive ? 'FIVE_OF_A_KIND' : 'FOUR_OF_A_KIND';
     return {
-      category,
-      categoryScore: isFive ? 7 : 6,
+      category: 'FOUR_OF_A_KIND',
+      categoryScore: 5,
       categoryArabic: 'أربعات',
       tiebreakerValues,
       descriptionArabic: `أربعات (${getRankArabicName(groups[0].value)})`,
     };
   }
 
-  if (topCount === 3 && secondCount >= 2) {
-    return {
-      category: 'FULL_HOUSE',
-      categoryScore: 5,
-      categoryArabic: 'فل هاوس',
-      tiebreakerValues,
-      descriptionArabic: `فل هاوس (${getRankArabicName(groups[0].value)} و ${getRankArabicName(groups[1].value)})`,
-    };
-  }
-
+  // 2. Three of a Kind (3 matching cards + 1 kicker)
   if (topCount === 3) {
     return {
       category: 'THREE_OF_A_KIND',
@@ -253,6 +266,7 @@ export function evaluateHand(cards: Card[]): HandEvaluation {
     };
   }
 
+  // 3. Two Pair (2 matching cards + 2 matching cards)
   if (topCount === 2 && secondCount === 2) {
     return {
       category: 'TWO_PAIR',
@@ -263,6 +277,7 @@ export function evaluateHand(cards: Card[]): HandEvaluation {
     };
   }
 
+  // 4. One Pair (2 matching cards + 2 kickers)
   if (topCount === 2) {
     return {
       category: 'ONE_PAIR',
@@ -273,6 +288,7 @@ export function evaluateHand(cards: Card[]): HandEvaluation {
     };
   }
 
+  // 5. High Card
   return {
     category: 'HIGH_CARD',
     categoryScore: 1,
@@ -302,10 +318,6 @@ export function compareEvaluatedHands(handA: HandEvaluation, handB: HandEvaluati
   return 0;
 }
 
-/**
- * Calculates the remaining share for the High Bidder:
- * Remaining Share = HighBidder.enteredBid - Sum(All Offers Assigned to Others)
- */
 export function calculateRemainingShare(
   highBidderEnteredBid: number,
   players: Pick<Player, 'id' | 'roundStatus' | 'currentOffer'>[],
@@ -318,10 +330,6 @@ export function calculateRemainingShare(
   return highBidderEnteredBid - sumOffers;
 }
 
-/**
- * Determines whether a player in the bidding circle must use the "All-In" (كل فلوسي / كلي) button
- * or can bid normally, strictly capped at their current balance.
- */
 export function getBiddingCapabilities(
   playerBalance: number,
   currentHighestBid: number,
@@ -376,9 +384,6 @@ export function getBiddingCapabilities(
   };
 }
 
-/**
- * Pure payout resolution function implementing the exact Phase 3 math.
- */
 export function resolveRoundPayouts(
   players: Player[],
   highBidderId: string
@@ -399,7 +404,6 @@ export function resolveRoundPayouts(
     playerDeltas[p.id] = 0;
   }
 
-  // Branch 1: Everyone Accepted (no challengers)
   if (challengers.length === 0) {
     const sumOfAllAgreedOffers = acceptors.reduce((sum, p) => sum + p.agreedOffer, 0);
     const highBidderShare = highBidder.enteredBid - sumOfAllAgreedOffers;
@@ -427,7 +431,6 @@ export function resolveRoundPayouts(
     };
   }
 
-  // Branch 2: Showdown between High Bidder and Challengers
   const showdownParticipants = [highBidder, ...challengers].map((p) => ({
     player: p,
     evalResult: p.handEvaluation || evaluateHand(p.hand),

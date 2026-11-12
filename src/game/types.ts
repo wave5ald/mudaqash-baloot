@@ -1,8 +1,8 @@
 export type Suit = '♠' | '♥' | '♦' | '♣';
 
-export type RankLabel = '7' | '8' | '9' | '10' | 'J' | 'Q' | 'K' | 'A';
+export type RankLabel = '5' | '6' | '7' | '8' | '9' | '10' | 'J' | 'Q' | 'K' | 'A';
 
-export type RankValue = 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14;
+export type RankValue = 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14;
 
 export interface Card {
   id: string;
@@ -12,9 +12,7 @@ export interface Card {
 }
 
 export type HandCategory =
-  | 'FIVE_OF_A_KIND'
   | 'FOUR_OF_A_KIND'
-  | 'FULL_HOUSE'
   | 'THREE_OF_A_KIND'
   | 'TWO_PAIR'
   | 'ONE_PAIR'
@@ -22,7 +20,7 @@ export type HandCategory =
 
 export interface HandEvaluation {
   category: HandCategory;
-  categoryScore: number; // 7 down to 1
+  categoryScore: number; // 5 down to 1
   categoryArabic: string;
   tiebreakerValues: number[]; // Descending comparison array of ranks
   descriptionArabic: string;
@@ -90,9 +88,9 @@ export type GamePhase =
   | 'GAME_OVER';
 
 export interface RoomSettings {
-  maxPlayers: number; // up to 10
+  maxPlayers: number; // up to 10 (min 4 to play)
   startingBalance: 500 | 2000;
-  cardsPerPlayer: 4 | 5;
+  cardsPerPlayer: 4; // Strictly 4 cards per player
   winningTarget: number; // e.g., 10000, 100000, 1000000
 }
 

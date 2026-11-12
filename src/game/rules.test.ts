@@ -9,6 +9,7 @@ import {
   evaluateHand,
   getBiddingCapabilities,
   getFirstAvailableColorId,
+  MIN_PLAYERS_TO_START,
   PLAYER_COLORS,
   resolveRoundPayouts,
 } from './rules';
@@ -23,15 +24,28 @@ function makeCards(specs: [ Card['rank'], Card['suit'], Card['value'] ][]): Card
   }));
 }
 
-test('Baloot deck creation: 32 cards for <= 7 players, 64 cards for > 7 players', () => {
-  const deck4 = createBalootDeck(4, 4);
-  assert.equal(deck4.length, 32);
+test('Minimum players is 4, and deck size scales dynamically to 4 * playerCount using highest ranks', () => {
+  assert.equal(MIN_PLAYERS_TO_START, 4);
 
-  const deck8 = createBalootDeck(8, 4);
-  assert.equal(deck8.length, 64);
+  // 4 players -> 16 cards of top 4 ranks: A, K, Q, J
+  const deck4 = createBalootDeck(4);
+  assert.equal(deck4.length, 16);
+  const ranks4 = new Set(deck4.map((c) => c.rank));
+  assert.deepEqual(Array.from(ranks4).sort(), ['A', 'J', 'K', 'Q']);
 
-  const deck7FiveCards = createBalootDeck(7, 5);
-  assert.equal(deck7FiveCards.length, 64);
+  // 5 players -> 20 cards from A down to 10 (A, K, Q, J, 10)
+  const deck5 = createBalootDeck(5);
+  assert.equal(deck5.length, 20);
+  const ranks5 = new Set(deck5.map((c) => c.rank));
+  assert.deepEqual(Array.from(ranks5).sort(), ['10', 'A', 'J', 'K', 'Q']);
+
+  // 8 players -> 32 cards (A down to 7)
+  const deck8 = createBalootDeck(8);
+  assert.equal(deck8.length, 32);
+
+  // 10 players -> 40 cards (A down to 5)
+  const deck10 = createBalootDeck(10);
+  assert.equal(deck10.length, 40);
 });
 
 test('10 exclusive player colors and color reservation lock', () => {
@@ -42,15 +56,10 @@ test('10 exclusive player colors and color reservation lock', () => {
     { id: 'p2', colorId: 'amber' as const },
   ];
 
-  // p3 cannot take emerald or amber
   assert.equal(canSelectPlayerColor(existing, 'p3', 'emerald'), false);
   assert.equal(canSelectPlayerColor(existing, 'p3', 'amber'), false);
-  // p3 can take ruby
   assert.equal(canSelectPlayerColor(existing, 'p3', 'ruby'), true);
-  // p1 can re-select their own color
   assert.equal(canSelectPlayerColor(existing, 'p1', 'emerald'), true);
-
-  // First available color skips emerald and amber -> returns ruby
   assert.equal(getFirstAvailableColorId(existing), 'ruby');
 });
 
@@ -65,71 +74,83 @@ test('Winning target threshold check ends table when player reaches target (e.g.
   assert.equal(checkTableWinner(players, 1000000), null);
 });
 
-test('Showdown Hand Hierarchy: Four of a Kind > Full House > Three of a Kind > Two Pair > One Pair > High Card', () => {
-  const fourAces = evaluateHand(
+test('Exact user hand comparison examples: 4(J) > 3(A)+1(K), 3(J) > 2(A)+2(K), 2(Q)+2(J) > 2(A)+any+any', () => {
+  const fourJacks = evaluateHand(
+    makeCards([
+      ['J', '♠', 11],
+      ['J', '♥', 11],
+      ['J', '♦', 11],
+      ['J', '♣', 11],
+    ])
+  );
+  const threeAcesOneKing = evaluateHand(
     makeCards([
       ['A', '♠', 14],
       ['A', '♥', 14],
       ['A', '♦', 14],
-      ['A', '♣', 14],
+      ['K', '♣', 13],
     ])
   );
-  const fourKings = evaluateHand(
+  const threeJacksOneTen = evaluateHand(
     makeCards([
-      ['K', '♠', 13],
-      ['K', '♥', 13],
+      ['J', '♠', 11],
+      ['J', '♥', 11],
+      ['J', '♦', 11],
+      ['10', '♣', 10],
+    ])
+  );
+  const twoAcesTwoKings = evaluateHand(
+    makeCards([
+      ['A', '♠', 14],
+      ['A', '♥', 14],
       ['K', '♦', 13],
       ['K', '♣', 13],
     ])
   );
-  const fullHouse = evaluateHand(
-    makeCards([
-      ['K', '♠', 13],
-      ['K', '♥', 13],
-      ['K', '♦', 13],
-      ['10', '♣', 10],
-      ['10', '♠', 10],
-    ])
-  );
-  const threeQueens = evaluateHand(
+  const twoQueensTwoJacks = evaluateHand(
     makeCards([
       ['Q', '♠', 12],
       ['Q', '♥', 12],
-      ['Q', '♦', 12],
-      ['7', '♣', 7],
+      ['J', '♦', 11],
+      ['J', '♣', 11],
     ])
   );
-  const twoPair = evaluateHand(
-    makeCards([
-      ['J', '♠', 11],
-      ['J', '♥', 11],
-      ['9', '♦', 9],
-      ['9', '♣', 9],
-    ])
-  );
-  const onePairAces = evaluateHand(
+  const twoAcesKingQueen = evaluateHand(
     makeCards([
       ['A', '♠', 14],
       ['A', '♥', 14],
-      ['10', '♦', 10],
-      ['8', '♣', 8],
-    ])
-  );
-  const highCardAce = evaluateHand(
-    makeCards([
-      ['A', '♠', 14],
-      ['K', '♥', 13],
-      ['9', '♦', 9],
-      ['7', '♣', 7],
+      ['K', '♦', 13],
+      ['Q', '♣', 12],
     ])
   );
 
-  assert.ok(compareEvaluatedHands(fourAces, fourKings) > 0, 'Four Aces beats Four Kings');
-  assert.ok(compareEvaluatedHands(fourKings, fullHouse) > 0, 'Four of a Kind beats Full House');
-  assert.ok(compareEvaluatedHands(fullHouse, threeQueens) > 0, 'Full House beats Three of a Kind');
-  assert.ok(compareEvaluatedHands(threeQueens, twoPair) > 0, 'Three of a Kind beats Two Pair');
-  assert.ok(compareEvaluatedHands(twoPair, onePairAces) > 0, 'Two Pair beats One Pair');
-  assert.ok(compareEvaluatedHands(onePairAces, highCardAce) > 0, 'One Pair beats High Card');
+  // Example 1 & 3: 4 (J) > 3 (A) + 1 (K)
+  assert.ok(
+    compareEvaluatedHands(fourJacks, threeAcesOneKing) > 0,
+    '4 (J) beats 3 (A) + 1 (K)'
+  );
+
+  // Prompt rule: 3 (J)s is stronger than someone who has 2 (A) and 2 (K)
+  assert.ok(
+    compareEvaluatedHands(threeJacksOneTen, twoAcesTwoKings) > 0,
+    '3 (J)s beats 2 (A) + 2 (K)'
+  );
+
+  // Example 2: 2 (Q) + 2 (J) > 2 (A) + any card + any other card
+  assert.ok(
+    compareEvaluatedHands(twoQueensTwoJacks, twoAcesKingQueen) > 0,
+    '2 (Q) + 2 (J) beats 2 (A) + K + Q'
+  );
+
+  // Tie-breakers within same category: 3 (A) > 3 (J), and 2 (A)+2(K) > 2(Q)+2(J)
+  assert.ok(
+    compareEvaluatedHands(threeAcesOneKing, threeJacksOneTen) > 0,
+    '3 (A) beats 3 (J)'
+  );
+  assert.ok(
+    compareEvaluatedHands(twoAcesTwoKings, twoQueensTwoJacks) > 0,
+    '2 (A) + 2 (K) beats 2 (Q) + 2 (J)'
+  );
 });
 
 test('Live Auto-Deduction Counter: calculates High Bidder remaining share accurately', () => {
@@ -310,10 +331,10 @@ test('Phase 3 Branch 2 Case B: Challenger beats High Bidder', () => {
       enteredBid: 15000,
       roundStatus: 'CHALLENGED',
       hand: makeCards([
-        ['A', '♠', 14],
-        ['A', '♥', 14],
-        ['A', '♦', 14],
-        ['A', '♣', 14],
+        ['J', '♠', 11],
+        ['J', '♥', 11],
+        ['J', '♦', 11],
+        ['J', '♣', 11],
       ]),
     }),
     createMockPlayer({
@@ -323,10 +344,10 @@ test('Phase 3 Branch 2 Case B: Challenger beats High Bidder', () => {
       enteredBid: 10000,
       roundStatus: 'CHALLENGED',
       hand: makeCards([
-        ['K', '♠', 13],
-        ['K', '♥', 13],
-        ['8', '♦', 8],
-        ['7', '♣', 7],
+        ['A', '♠', 14],
+        ['A', '♥', 14],
+        ['A', '♦', 14],
+        ['K', '♣', 13],
       ]),
     }),
   ];

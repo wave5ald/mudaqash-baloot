@@ -62,7 +62,7 @@ export function decideBotBidAction(
 
   // Bot has more balance than state.highestBid -> can bid higher up to bot.balance
   const willingnessRatio =
-    score >= 5 ? 1.0 : score === 4 ? 0.95 : score === 3 ? 0.85 : score === 2 ? 0.65 : 0.4;
+    score >= 5 ? 1.0 : score === 4 ? 0.92 : score === 3 ? 0.8 : score === 2 ? 0.65 : 0.4;
   const maxWilling = Math.min(
     bot.balance,
     Math.max(caps.minNormalBid, Math.round(bot.balance * willingnessRatio))
@@ -95,9 +95,9 @@ export function decideBotHighBidderOffers(
 
   if (activeOthers.length === 0) return {};
 
-  // Strong hand -> offer smaller amounts (wants people to either accept cheap or challenge and lose)
-  // Weak hand (bluff) -> offer generous share to persuade others to accept without showdown
-  const isStrong = handEval.categoryScore >= 3 || (handEval.categoryScore === 2 && handEval.tiebreakerValues[0] >= 13);
+  const isStrong =
+    handEval.categoryScore >= 3 ||
+    (handEval.categoryScore === 2 && handEval.tiebreakerValues[0] >= 13);
   const totalPoolToDistribute = isStrong
     ? Math.floor(bot.enteredBid * 0.35)
     : Math.floor(bot.enteredBid * 0.65);
@@ -125,19 +125,18 @@ export function decideBotOfferResponse(
   const offer = bot.currentOffer;
   const highBid = state.highestBid || 1000;
 
-  // Very strong hand (Three of a Kind, Full House, Four of a Kind, or Two Pair Aces/Kings) -> Challenge (مداقش)
+  // Very strong hand (Four of a Kind [5], Three of a Kind [4], or Two Pair Aces/Kings [3]) -> Challenge (مداقش)
   if (
     handEval.categoryScore >= 4 ||
     (handEval.categoryScore === 3 && handEval.tiebreakerValues[0] >= 13)
   ) {
-    // Unless offer is huge (>= 45% of high bid)
     if (offer >= highBid * 0.45) {
       return { decision: 'ACCEPT' };
     }
     return { decision: 'CHALLENGE' };
   }
 
-  // Medium hand (Two Pair or High Pair)
+  // Medium hand (Two Pair or One Pair)
   if (handEval.categoryScore >= 2) {
     if (offer >= Math.max(250, bot.enteredBid * 0.5)) {
       return { decision: 'ACCEPT' };
@@ -149,7 +148,6 @@ export function decideBotOfferResponse(
         return { decision: 'BARGAIN', requestedAmount: targetReq };
       }
     }
-    // Decide between Challenge and Accept
     if (handEval.tiebreakerValues[0] >= 13 && offer < 200) {
       return { decision: 'CHALLENGE' };
     }
@@ -164,7 +162,6 @@ export function decideBotOfferResponse(
     return { decision: 'ACCEPT' };
   }
 
-  // Offer is 0
   if (bot.bargainCount < 2) {
     return { decision: 'BARGAIN', requestedAmount: 200 };
   }

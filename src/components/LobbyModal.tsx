@@ -16,7 +16,13 @@ import {
   Palette,
   Lock,
 } from 'lucide-react';
-import { getPlayerColorOption, PLAYER_COLORS } from '../game/rules';
+import {
+  CARDS_PER_PLAYER,
+  getActiveRanksForPlayerCount,
+  getPlayerColorOption,
+  MIN_PLAYERS_TO_START,
+  PLAYER_COLORS,
+} from '../game/rules';
 import { GameState, PlayerColorId, RoomSettings } from '../game/types';
 
 interface LobbyModalProps {
@@ -76,6 +82,11 @@ export const LobbyModal: React.FC<LobbyModalProps> = ({
   };
 
   const localPlayer = gameState.players.find((p) => p.id === localPlayerId);
+  const effectivePlayerCount = Math.max(MIN_PLAYERS_TO_START, gameState.players.length);
+  const activeRanks = getActiveRanksForPlayerCount(effectivePlayerCount);
+  const lowestRankLabel = activeRanks[activeRanks.length - 1]?.label || 'J';
+  const totalDeckCards = effectivePlayerCount * CARDS_PER_PLAYER;
+  const canStartMatch = gameState.players.length >= MIN_PLAYERS_TO_START;
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-[#0B0F17]/95 overflow-y-auto">
@@ -91,7 +102,7 @@ export const LobbyModal: React.FC<LobbyModalProps> = ({
                 مداقش — Mudaqash
               </h1>
               <p className="text-xs text-[#94A3B8]">
-                طاولة بلوت جماعية للمزايدة والعروض والتحدي المباشر
+                طاولة بلوت جماعية للمزايدة والعروض والتحدي المباشر (من 4 إلى 10 لاعبين)
               </p>
             </div>
           </div>
@@ -217,7 +228,7 @@ export const LobbyModal: React.FC<LobbyModalProps> = ({
                     <span className="font-mono-num font-bold text-[#F59E0B]">
                       {gameState.settings.winningTarget.toLocaleString('en-US')}
                     </span>{' '}
-                    واختر لون مربعك الخاص أو أضف لاعبين آليين حتى 10 مقاعد.
+                    واختر لون مربعك الخاص أو أضف لاعبين آليين (الحد الأدنى 4 لاعبين).
                   </p>
                 </div>
                 <button
@@ -304,37 +315,17 @@ export const LobbyModal: React.FC<LobbyModalProps> = ({
                 </div>
               </div>
 
-              {/* Cards per Player (4 or 5) */}
+              {/* Fixed 4 Cards per Player & Dynamic Deck Info */}
               <div>
                 <div className="flex items-center gap-1.5 text-xs font-bold text-[#94A3B8] mb-1.5">
                   <Layers className="w-3.5 h-3.5 text-[#10B981]" />
-                  <span>الكروت لكل لاعب</span>
+                  <span>نظام الكروت والورق</span>
                 </div>
-                <div className="grid grid-cols-2 gap-1.5">
-                  <button
-                    type="button"
-                    disabled={!isHost}
-                    onClick={() => onUpdateSettings({ cardsPerPlayer: 4 })}
-                    className={`py-1.5 rounded-lg font-bold text-xs border cursor-pointer ${
-                      gameState.settings.cardsPerPlayer === 4
-                        ? 'bg-[#059669] text-white border-[#10B981]'
-                        : 'bg-[#1E293B] text-[#94A3B8] border-[#334155]'
-                    }`}
-                  >
-                    4 كروت
-                  </button>
-                  <button
-                    type="button"
-                    disabled={!isHost}
-                    onClick={() => onUpdateSettings({ cardsPerPlayer: 5 })}
-                    className={`py-1.5 rounded-lg font-bold text-xs border cursor-pointer ${
-                      gameState.settings.cardsPerPlayer === 5
-                        ? 'bg-[#059669] text-white border-[#10B981]'
-                        : 'bg-[#1E293B] text-[#94A3B8] border-[#334155]'
-                    }`}
-                  >
-                    5 كروت
-                  </button>
+                <div className="bg-[#1E293B] border border-[#10B981]/60 rounded-lg px-2 py-1.5 text-xs flex items-center justify-between gap-1 whitespace-nowrap">
+                  <span className="font-bold text-[#10B981]">4 كروت</span>
+                  <span className="font-mono-num text-[11px] text-[#F8FAFC]">
+                    {totalDeckCards} كرت (A-{lowestRankLabel})
+                  </span>
                 </div>
               </div>
 
@@ -372,21 +363,24 @@ export const LobbyModal: React.FC<LobbyModalProps> = ({
                 </div>
               </div>
 
-              {/* Max Players & Deck Mode */}
+              {/* Minimum & Maximum Players Info */}
               <div>
                 <div className="flex items-center gap-1.5 text-xs font-bold text-[#94A3B8] mb-1.5">
                   <Users className="w-3.5 h-3.5 text-[#38BDF8]" />
-                  <span>المقاعد والورق</span>
+                  <span>عدد اللاعبين (4 - 10)</span>
                 </div>
                 <div className="flex items-center justify-between bg-[#1E293B] border border-[#334155] rounded-lg px-2.5 py-1.5 text-xs">
                   <span className="font-mono-num font-bold text-[#F8FAFC]">
                     {gameState.players.length} / {gameState.settings.maxPlayers}
                   </span>
-                  <span className="text-[11px] text-[#F59E0B] font-bold">
-                    {gameState.players.length > 7 ||
-                    gameState.players.length * gameState.settings.cardsPerPlayer > 32
-                      ? 'مضاعف (64)'
-                      : 'بلوت (32)'}
+                  <span
+                    className={`text-[11px] font-bold ${
+                      canStartMatch ? 'text-[#10B981]' : 'text-[#F59E0B]'
+                    }`}
+                  >
+                    {canStartMatch
+                      ? 'جاهز للبدء'
+                      : `يتطلب ${MIN_PLAYERS_TO_START - gameState.players.length} بعد`}
                   </span>
                 </div>
               </div>
@@ -464,7 +458,7 @@ export const LobbyModal: React.FC<LobbyModalProps> = ({
             <div>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold text-[#94A3B8]">
-                  المقاعد على الطاولة ({gameState.players.length}/10)
+                  المقاعد على الطاولة ({gameState.players.length}/10 — الحد الأدنى للعب 4 لاعبين)
                 </span>
                 {isHost && gameState.players.length < gameState.settings.maxPlayers && (
                   <button
@@ -533,20 +527,29 @@ export const LobbyModal: React.FC<LobbyModalProps> = ({
             {/* Start Match Footer */}
             <div className="pt-2 border-t border-[#1E293B] flex items-center justify-between gap-4">
               <div className="text-xs text-[#94A3B8]">
-                حد الفوز بالطاولة:{' '}
-                <strong className="font-mono-num text-[#F59E0B]">
-                  {gameState.settings.winningTarget.toLocaleString('en-US')}
-                </strong>{' '}
-                — أول لاعب يصل لهذا الرصيد يفوز وتنتهي الطاولة.
+                {!canStartMatch ? (
+                  <span className="text-[#F59E0B] font-bold">
+                    لا يمكن بدء اللعب بأقل من 4 لاعبين (يوجد حالياً {gameState.players.length} — أضف{' '}
+                    {MIN_PLAYERS_TO_START - gameState.players.length} لاعبين للبدء).
+                  </span>
+                ) : (
+                  <span>
+                    مجموع الورق لهذه الطاولة:{' '}
+                    <strong className="font-mono-num text-[#10B981]">
+                      {totalDeckCards} كرت
+                    </strong>{' '}
+                    (من الأكة A إلى {lowestRankLabel}) — 4 كروت لكل لاعب.
+                  </span>
+                )}
               </div>
 
               {isHost ? (
                 <button
                   type="button"
                   data-start="true"
-                  disabled={gameState.players.length < 2}
+                  disabled={!canStartMatch}
                   onClick={onStartMatch}
-                  className="px-6 py-2.5 bg-[#059669] hover:bg-[#047857] disabled:opacity-40 text-white font-bold text-sm rounded-xl flex items-center gap-2 cursor-pointer whitespace-nowrap shadow-lg"
+                  className="px-6 py-2.5 bg-[#059669] hover:bg-[#047857] disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-sm rounded-xl flex items-center gap-2 cursor-pointer whitespace-nowrap shadow-lg"
                 >
                   <Play className="w-4 h-4" />
                   <span>بدء الجولة الأولى</span>
