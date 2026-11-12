@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Peer, { DataConnection } from 'peerjs';
+import { Analytics } from '@vercel/analytics/react';
 import {
   calculateRemainingShare,
   canSelectPlayerColor,
@@ -1154,6 +1155,7 @@ export default function App() {
           onStartMatch={handleStartMatch}
         />
       )}
+      <Analytics />
     </main>
   );
 }
